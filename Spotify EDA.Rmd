@@ -1,0 +1,172 @@
+---
+title: "Spotify EDA"
+output: html_document
+---
+
+Dataset Source: https://www.kaggle.com/datasets/leonardopena/top-spotify-songs-from-20102019-by-year
+```{r}
+library(dplyr)
+data <- read.csv("top10s.csv")
+
+by_genre <- data %>% group_by(top.genre)
+
+genre_count <- by_genre %>% summarise(count = n()) %>% arrange(desc(count))
+
+genre_count
+```
+```{r}
+library(tidyverse)
+library(hrbrthemes)
+
+# Load dataset from github
+p <- data %>%
+  ggplot( aes(x=nrgy)) +
+    geom_histogram( binwidth=3, fill="#69b3a2", color="#e9ecef", alpha=0.9) +
+    ggtitle("Bin size = 3") +
+    theme_ipsum() +
+    theme(
+      plot.title = element_text(size=15)
+    )
+p
+```
+
+```{r}
+library(ggplot2)
+
+
+ggplot(head(genre_count, n = 10), aes(x = top.genre, y = count)) + geom_bar(stat = "identity") + geom_col() + scale_x_discrete(guide = guide_axis(n.dodge=3))
+```
+
+```{r}
+library(reshape2)
+cordata <- data[c(6:15)]
+
+cormat <- round(cor(cordata), 2)
+melted_cormat <- melt(cormat)
+
+ggplot(data = melted_cormat, aes(x = Var1, y = Var2, fill = value)) + geom_tile()
+```
+
+Source: http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
+
+```{r}
+cordata <- cordata %>% filter(acous >= 5)
+ggplot(data=cordata, aes(x=acous, y=nrgy, group=1)) +
+  geom_line(linetype = "dotted")+
+  geom_point()
+```
+
+```{r}
+library(ggExtra)
+p <- ggplot(cordata, aes(x=acous, y=nrgy)) +
+      geom_point() +
+      theme(legend.position="none")
+p2 <- ggMarginal(p, type="density")
+p2
+```
+```{r}
+dncedata <- data %>% group_by(year) %>% summarise(
+  mean = mean(dnce),
+  sd(dnce)
+)
+
+dncedata
+ggplot(dncedata, aes(x = year, y = mean)) +
+  geom_point() +
+  geom_text(
+    label = dncedata$year,
+    nudge_x = 0.25, nudge_y = 0.25,
+    check_overlap = T
+  )
+```
+```{r}
+pop_by_artist <- data %>% group_by(artist) %>%
+  summarise(
+    pop = sum(pop)
+  ) %>%
+  arrange(desc(pop))
+pop_by_artist <- pop_by_artist %>% mutate(id= dplyr::row_number())
+```
+
+
+```{r}
+library(tidyverse)
+label_data <- pop_by_artist
+number_of_bar <- nrow(label_data)
+angle <-  90 - 360 * (label_data$id-0.5) /number_of_bar 
+
+label_data$hjust<-ifelse( angle < -90, 1, 0)
+ 
+# flip angle BY to make them readable
+label_data$angle<-ifelse(angle < -90, angle+180, angle)
+
+p <- ggplot(label_data, aes(x=as.factor(id), y=pop)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  # This add the bars with a blue color
+  geom_bar(stat="identity", fill=alpha("skyblue", 0.7)) +
+  
+  # Limits of the plot = very important. The negative value controls the size of the inner circle, the positive one is useful to add size over each bar
+  ylim(-100,120) +
+  
+  # Custom the theme: no axis title and no cartesian grid
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm")      # Adjust the margin to make in sort labels are not truncated!
+  ) +
+  
+  # This makes the coordinate polar instead of cartesian.
+  coord_polar(start = 0) +
+  
+  # Add the labels, using the label_data dataframe that we have created before
+  geom_text(data=label_data, aes(x=id, y=pop+10, label=artist, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
+ 
+p
+label_data
+```
+
+```{r}
+library(randomForest)
+numerical <- data[c(6:15)]
+
+rf <- randomForest(pop ~ ., data = numerical, ntree = 500)
+
+varImpPlot(rf)
+```
+According to this graph, the energy, BPM, duration and the danceability of the song is important to its popularlity.
+
+```{r}
+popcount <- data %>% group_by(top.genre) %>%
+  summarise(
+    count = n()
+  )
+popcount <- popcount %>% arrange(desc(count))
+
+top_genres <- head(popcount, n = 10)$top.genre
+
+ridgedata <- data %>% filter(top.genre %in% top_genres)
+ridgedata
+```
+
+```{r}
+library(ggridges)
+library(ggplot2)
+library(viridis)
+library(hrbrthemes)
+
+# Plot
+
+ggplot(ridgedata, aes(x = pop, y = top.genre, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  scale_fill_viridis(name = "Temp. [F]", option = "C") +
+  labs(title = 'Popularity Density Across Top 10 Genres') +
+  theme_ipsum() +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0.1, "lines"),
+      strip.text.x = element_text(size = 8)
+    )
+```
+
